@@ -9,6 +9,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
 
   const [transactionInProgress, setTransactionInProgress] = useState(false);
   const [videoFile, setVideoFile] = useState(null);
+  // let thumbnail = null;
   const [thumbnail, setThumbnail] = useState(null);
 
   const [forminfo, setFormInfo] = useState({
@@ -32,10 +33,51 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
     setVideoFile(event.target.files[0]);
   };
 
+  const createThumbnail = () => {
+    return new Promise((resolve, reject) => {
+      const allowedTypes = ["video/mp4", "video/webm", "video/ogg"];
+      if (allowedTypes.includes(videoFile.type)) {
+        const videoElement = document.createElement('video');
+        videoElement.preload = 'metadata';
+
+        const url = URL.createObjectURL(videoFile);
+        videoElement.src = url;
+
+        videoElement.addEventListener('loadeddata', () => {
+          videoElement.currentTime = 0;
+
+          videoElement.addEventListener('seeked', async () => {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            if (!context) {
+              reject(new Error("Unable to get canvas context"));
+              return;
+            }
+
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+
+            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+            const dataURL = canvas.toDataURL('image/jpeg');
+            const blob = await (await fetch(dataURL)).blob();
+            setThumbnail(blob);
+
+            URL.revokeObjectURL(url);
+            resolve(blob);
+          });
+        });
+
+      } else {
+        reject(new Error("Invalid video file type"));
+      }
+    });
+  }
+
   const handleEvent = async (e) => {
     e.preventDefault();
     forminfo.owner = account.address;
-    if(!videoFile) {
+    if (!videoFile) {
       toast.error("Upload video!", {
         position: "top-center"
       })
@@ -43,57 +85,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
     }
     setTransactionInProgress(true)
 
-    const allowedTypes = ["video/mp4", "video/webm", "video/ogg"];
-    if (allowedTypes.includes(videoFile.type)) {
-      // Create a video element
-      const videoElement = document.createElement('video');
-      videoElement.preload = 'metadata';
-
-      // Load the video file into the video element
-      const url = URL.createObjectURL(videoFile);
-      videoElement.src = url;
-
-      videoElement.addEventListener('loadeddata', () => {
-        // Once video data is loaded, capture the first frame
-        videoElement.currentTime = 0; // Go to the start of the video
-
-        videoElement.addEventListener('seeked', async () => {
-          // Create a canvas element to draw the frame
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          if (!context) return;
-
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-
-          // Draw the first frame of the video onto the canvas
-          context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-
-          // Convert canvas to data URL
-          const dataURL = canvas.toDataURL('image/jpeg');
-          const blob = await (await fetch(dataURL)).blob();
-          setThumbnail(blob); // Set the thumbnail state
-          console.log(blob);
-          console.log(thumbnail);
-          console.log(typeof (blob));
-
-          // Clean up
-          URL.revokeObjectURL(url);
-        });
-      });
-
-    } else {
-      toast.info(
-        <div>
-          <p>Please select a valid video file. </p>
-          <p>(Accepted types: 'video/mp4', 'video/webm', 'video/ogg')</p>
-        </div>,
-        {
-          position: "top-center",
-        }
-      );
-      return
-    }
+    const thumbnailBlob = await createThumbnail();
 
     console.log(thumbnail);
     console.log(forminfo);
@@ -101,7 +93,9 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
     const formData = new FormData();
     const jsonformData = new FormData();
 
-    formData.append('file', thumbnail);
+    formData.append('file', thumbnailBlob);
+    console.log(thumbnailBlob);
+    
 
     const metadata = JSON.stringify({
       name: forminfo.title,
@@ -188,7 +182,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
           console.log("meta: ", meta);
           console.log("minting...");
           mintThenList(meta);
-          
+
         } catch (error) {
           toast.error("Error minting NFT", {
             position: "top-center"
@@ -221,7 +215,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
   //     })
   //     console.log(transferCoinTransaction);
   //   }
-    
+
   //   const method2 = async () => {
   //     const transaction = await client.transaction.build.simple({
   //       sender: "0x22f04441cbc69fc0010e9b16f548153469279ae2b92e2ac14a96e6eeae9c7550",
@@ -241,7 +235,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
   //     });
   //     console.log(userTransactionResponse)
   //   }
-    
+
   //   const method3 = async () => {
   //     const transaction = await client.transaction.build.simple({
   //       sender: account.address,
@@ -280,9 +274,9 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
     try {
       console.log(forminfo.thumbnail);
 
-      const listingPrice = Math.round(10**8 * forminfo.price);
+      const listingPrice = Math.round(10 ** 8 * forminfo.price);
       // console.log(listingPrice);
-      
+
       const payload = {
         data: {
           function: `${moduleAddress}::${moduleName}::add_nft`,
@@ -317,7 +311,7 @@ function Create({ moduleName, moduleAddress, connected, account, client }) {
 
             <div className='max-w-lg mx-auto'>
               <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-white" for="file">Upload Video</label>
-              <input onChange={changeHandler} name="file" class="block w-full mb-4 h-8 text-m  text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400" type="file" accept='video/*'/>
+              <input onChange={changeHandler} name="file" class="block w-full mb-4 h-8 text-m  text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400" type="file" accept='video/*' />
             </div>
 
 
